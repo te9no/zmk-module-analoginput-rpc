@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package dya.analog_input;
+
+enum AnalogRole {
+    ANALOG_ROLE_REL_X = 0;
+    ANALOG_ROLE_REL_Y = 1;
+    ANALOG_ROLE_REL_WHEEL = 2;
+    ANALOG_ROLE_REL_HWHEEL = 3;
+    ANALOG_ROLE_ABS_X = 4;
+    ANALOG_ROLE_ABS_Y = 5;
+}
+
+enum AnalogResponseCurve {
+    ANALOG_RESPONSE_CURVE_LINEAR = 0;
+    ANALOG_RESPONSE_CURVE_SOFT = 1;
+    ANALOG_RESPONSE_CURVE_AGGRESSIVE = 2;
+}
+
+message AnalogAxisConfig {
+    uint32 axis_index = 1;
+    string name = 2;
+    bool enabled = 3;
+    uint32 adc_channel = 4;
+    uint32 mv_mid = 5;
+    uint32 mv_min_max = 6;
+    uint32 mv_deadzone = 7;
+    uint32 scale_multiplier = 8;
+    uint32 scale_divisor = 9;
+    bool invert = 10;
+    AnalogRole role = 11;
+    bool report_on_change_only = 12;
+    uint32 output_min = 13;
+    uint32 output_max = 14;
+    AnalogResponseCurve response_curve = 15;
+}
+
+message AnalogInputDevice {
+    uint32 id = 1;
+    string name = 2;
+    uint32 sampling_hz = 3;
+    uint32 report_interval_ms = 4;
+    repeated AnalogAxisConfig axes = 5;
+}
+
+message ListDevicesRequest {}
+message ListDevicesResponse {
+    repeated AnalogInputDevice devices = 1;
+}
+
+message GetDeviceRequest {
+    uint32 id = 1;
+}
+message GetDeviceResponse {
+    AnalogInputDevice device = 1;
+}
+
+message SetSamplingHzRequest {
+    uint32 id = 1;
+    uint32 value = 2;
+}
+message SetSamplingHzResponse {}
+
+message SetReportIntervalRequest {
+    uint32 id = 1;
+    uint32 value_ms = 2;
+}
+message SetReportIntervalResponse {}
+
+message SetAxisConfigRequest {
+    uint32 device_id = 1;
+    AnalogAxisConfig axis = 2;
+}
+message SetAxisConfigResponse {}
+
+message ResetDeviceRequest {
+    uint32 id = 1;
+}
+message ResetDeviceResponse {}
+
+message ErrorResponse {
+    string message = 1;
+}
+
+message Request {
+    oneof request_type {
+        ListDevicesRequest list_devices = 1;
+        GetDeviceRequest get_device = 2;
+        SetSamplingHzRequest set_sampling_hz = 3;
+        SetReportIntervalRequest set_report_interval = 4;
+        SetAxisConfigRequest set_axis_config = 5;
+        ResetDeviceRequest reset_device = 6;
+    }
+}
+
+message Response {
+    oneof response_type {
+        ErrorResponse error = 1;
+        ListDevicesResponse list_devices = 2;
+        GetDeviceResponse get_device = 3;
+        SetSamplingHzResponse set_sampling_hz = 4;
+        SetReportIntervalResponse set_report_interval = 5;
+        SetAxisConfigResponse set_axis_config = 6;
+        ResetDeviceResponse reset_device = 7;
+    }
+}
+
+message DeviceChangedNotification {
+    AnalogInputDevice device = 1;
+}
+
+message Notification {
+    oneof notification_type {
+        DeviceChangedNotification device_changed = 1;
+    }
+}

@@ -1,0 +1,5 @@
+dya.analog_input.AnalogAxisConfig.name max_size:16
+dya.analog_input.AnalogInputDevice.name max_size:32
+dya.analog_input.AnalogInputDevice.axes max_count:2
+dya.analog_input.ListDevicesResponse.devices max_count:1
+dya.analog_input.ErrorResponse.message max_size:64

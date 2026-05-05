@@ -1,0 +1,59 @@
+# Copyright (c) 2026 The DYA Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Runtime-configurable analog input driver for MeKaBu/DYA Studio.
+
+compatible: "dya,analog-input"
+
+properties:
+  sampling-hz:
+    type: int
+    default: 100
+  report-interval-ms:
+    type: int
+    default: 0
+
+child-binding:
+  description: Per-axis configuration settings
+  properties:
+    io-channels:
+      type: phandle-array
+      required: true
+    label:
+      type: string
+    mv-mid:
+      type: int
+      required: true
+    mv-min-max:
+      type: int
+      required: true
+    mv-deadzone:
+      type: int
+      default: 10
+    invert:
+      type: boolean
+    report-on-change-only:
+      type: boolean
+    scale-multiplier:
+      type: int
+      default: 1
+    scale-divisor:
+      type: int
+      default: 70
+    evt-type:
+      type: int
+      required: true
+    input-code:
+      type: int
+      required: true
+    output-min:
+      type: int
+      default: 0
+    output-max:
+      type: int
+      default: 24
+    response-curve:
+      type: int
+      default: 0
+      description: 0 = linear, 1 = soft, 2 = aggressive

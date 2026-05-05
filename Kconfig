@@ -1,10 +1,52 @@
-config ZMK_TEMPLATE_FEATURE
-    bool "Enable template feature"
+config DYA_ANALOG_INPUT
+    bool "DYA runtime analog input driver"
+    select ADC
+    select INPUT
+    help
+      Runtime-configurable analog input driver for MeKaBu/DYA Studio.
 
-if ZMK_TEMPLATE_FEATURE
+if DYA_ANALOG_INPUT
 
-config ZMK_TEMPLATE_FEATURE_STUDIO_RPC
-    bool "Enable template feature custom Studio RPC"
+config DYA_ANALOG_INPUT_USE_DTS_ADC_CH_CFG
+    bool "Use per ADC channel config from devicetree"
+    help
+      Pass the io-channel ADC channel config from devicetree to adc_channel_setup.
+      Leave disabled for the nRF52840 defaults used by the original analog driver.
+
+config DYA_ANALOG_INPUT_ADC_RES
+    int "ADC resolution"
+    default 12
+
+config DYA_ANALOG_INPUT_WORKQUEUE_PRIORITY
+    int "Workqueue priority"
+    default 10
+
+config DYA_ANALOG_INPUT_WORKQUEUE_STACK_SIZE
+    int "Workqueue stack size"
+    default 1024
+
+config DYA_ANALOG_INPUT_MAX_DEVICES
+    int "Maximum devices exposed to DYA Studio"
+    default 1
+
+config DYA_ANALOG_INPUT_STALE_SAMPLE_MS
+    int "Milliseconds before stale accumulated deltas are purged"
+    default 250
+
+config DYA_ANALOG_INPUT_LOG_DBG_RAW
+    bool "Log raw ADC readings"
+
+config DYA_ANALOG_INPUT_LOG_DBG_REPORT
+    bool "Log reported input events"
+
+config DYA_ANALOG_INPUT_STUDIO_RPC
+    bool "Enable DYA analog input custom Studio RPC"
     depends on ZMK_STUDIO
+    help
+      Exposes the dya_analog_input custom Studio subsystem used by DYA Studio.
+
+module = DYA_ANALOG_INPUT
+module-str = DYA_ANALOG_INPUT
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
 endif
