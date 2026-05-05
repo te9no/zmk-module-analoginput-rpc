@@ -153,47 +153,47 @@ static int dya_analog_input_report_data(const struct device *dev) {
     }
 
     int64_t now = k_uptime_get();
+    struct adc_sequence *sequence = &data->as;
+
+    if (data->axes_len == 0) {
+        return 0;
+    }
+
+    const struct device *adc = data->axes[0].adc_channel.dev;
+
+#ifdef CONFIG_ADC_ASYNC
+    int err = adc_read_async(adc, sequence, &data->async_sig);
+    if (err < 0) {
+        LOG_ERR("adc_read_async returned %d", err);
+        return err;
+    }
+    err = k_poll(&data->async_evt, 1, K_FOREVER);
+    if (err < 0) {
+        LOG_ERR("k_poll returned %d", err);
+        return err;
+    }
+    if (!data->async_evt.signal->signaled) {
+        return 0;
+    }
+    data->async_evt.signal->signaled = 0;
+    data->async_evt.state = K_POLL_STATE_NOT_READY;
+#else
+    int err = adc_read(adc, sequence);
+    if (err < 0) {
+        LOG_ERR("adc_read returned %d", err);
+        return err;
+    }
+#endif
 
     for (uint8_t i = 0; i < data->axes_len; i++) {
         const struct dya_analog_input_axis_runtime_config *axis = &data->axes[i];
-        const struct device *adc = axis->adc_channel.dev;
-        uint16_t sample = 0;
-        struct adc_sequence sequence = data->as;
-
-        sequence.channels = BIT(axis->adc_channel.channel_id);
-        sequence.buffer = &sample;
-        sequence.buffer_size = sizeof(sample);
-
-#ifdef CONFIG_ADC_ASYNC
-        int err = adc_read_async(adc, &sequence, &data->async_sig);
-        if (err < 0) {
-            LOG_ERR("axis %u adc_read_async returned %d", i, err);
-            return err;
-        }
-        err = k_poll(&data->async_evt, 1, K_FOREVER);
-        if (err < 0) {
-            LOG_ERR("axis %u k_poll returned %d", i, err);
-            return err;
-        }
-        if (!data->async_evt.signal->signaled) {
-            continue;
-        }
-        data->async_evt.signal->signaled = 0;
-        data->async_evt.state = K_POLL_STATE_NOT_READY;
-#else
-        int err = adc_read(adc, &sequence);
-        if (err < 0) {
-            LOG_ERR("axis %u adc_read returned %d", i, err);
-            return err;
-        }
-#endif
-
-        data->as_buff[i] = sample;
-        int32_t mv = sample;
-        adc_raw_to_millivolts(adc_ref_internal(adc), ADC_GAIN_1_6, sequence.resolution, &mv);
+        const struct device *axis_adc = axis->adc_channel.dev;
+        int32_t mv = data->as_buff[i];
+        adc_raw_to_millivolts(adc_ref_internal(axis_adc), ADC_GAIN_1_6, sequence->resolution, &mv);
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
-        LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id, sample, mv);
+        LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id,
+                data->as_buff[i], mv);
 #endif
 
         int32_t value = axis_to_report_value(mv, axis);
@@ -275,6 +275,7 @@ static void sampling_timer_handler(struct k_timer *timer) {
     LOG_INF("%s sampling timer", data->dev->name);
 #endif
     k_work_submit_to_queue(&dya_analog_input_work_q, &data->sampling_work);
+    k_work_submit(&data->sampling_work);
 }
 
 static int active_set_value(const struct device *dev, bool active) {
