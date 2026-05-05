@@ -262,12 +262,18 @@ static int dya_analog_input_report_data(const struct device *dev) {
 static void sampling_work_handler(struct k_work *work) {
     struct dya_analog_input_data *data = CONTAINER_OF(work, struct dya_analog_input_data,
                                                      sampling_work);
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
+    LOG_INF("%s sampling work", data->dev->name);
+#endif
     (void)dya_analog_input_report_data(data->dev);
 }
 
 static void sampling_timer_handler(struct k_timer *timer) {
     struct dya_analog_input_data *data = CONTAINER_OF(timer, struct dya_analog_input_data,
                                                      sampling_timer);
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
+    LOG_INF("%s sampling timer", data->dev->name);
+#endif
     k_work_submit_to_queue(&dya_analog_input_work_q, &data->sampling_work);
 }
 
@@ -291,12 +297,15 @@ static int enable_set_value(const struct device *dev, bool enable) {
     if (enable) {
         if (data->sampling_hz == 0) {
             k_timer_start(&data->sampling_timer, K_NO_WAIT, K_NO_WAIT);
+            LOG_INF("%s sampling enabled: one-shot", dev->name);
         } else {
             uint32_t usec = 1000000UL / data->sampling_hz;
             k_timer_start(&data->sampling_timer, K_USEC(usec), K_USEC(usec));
+            LOG_INF("%s sampling enabled: %u Hz", dev->name, data->sampling_hz);
         }
     } else {
         k_timer_stop(&data->sampling_timer);
+        LOG_INF("%s sampling disabled", dev->name);
     }
 
     data->enabled = enable;
@@ -414,6 +423,7 @@ static void dya_analog_input_async_init(struct k_work *work) {
     if (data->sampling_hz) {
         enable_set_value(dev, true);
     }
+    k_work_submit_to_queue(&dya_analog_input_work_q, &data->sampling_work);
     LOG_INF("%s ready", dev->name);
 }
 
