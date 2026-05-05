@@ -193,7 +193,7 @@ static int dya_analog_input_report_data(const struct device *dev) {
         adc_raw_to_millivolts(adc_ref_internal(adc), ADC_GAIN_1_6, sequence.resolution, &mv);
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
-        LOG_DBG("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id, sample, mv);
+        LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id, sample, mv);
 #endif
 
         int32_t value = axis_to_report_value(mv, axis);
@@ -250,7 +250,7 @@ static int dya_analog_input_report_data(const struct device *dev) {
         }
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_REPORT)
-        LOG_DBG("input_report axis %u value %d type %u code %u", i, value, axis->evt_type,
+        LOG_INF("input_report axis %u value %d type %u code %u", i, value, axis->evt_type,
                 axis->input_code);
 #endif
         input_report(dev, axis->evt_type, axis->input_code, value, i == idx_to_sync, K_NO_WAIT);
@@ -360,6 +360,20 @@ static void dya_analog_input_async_init(struct k_work *work) {
     const struct device *dev = data->dev;
 
     copy_defaults_to_runtime(dev);
+    if (data->axes_len == 0) {
+        LOG_ERR("%s has no analog axes", dev->name);
+        return;
+    }
+
+    LOG_INF("%s initializing: axes=%u sampling=%uHz report=%ums", dev->name, data->axes_len,
+            data->sampling_hz, data->report_interval_ms);
+    for (uint8_t i = 0; i < data->axes_len; i++) {
+        LOG_INF("%s axis %u: adc=%s channel=%u mid=%u range=%u deadzone=%u type=%u code=%u",
+                dev->name, i, data->axes[i].adc_channel.dev->name,
+                data->axes[i].adc_channel.channel_id, data->axes[i].mv_mid,
+                data->axes[i].mv_min_max, data->axes[i].mv_deadzone, data->axes[i].evt_type,
+                data->axes[i].input_code);
+    }
 
     memset(data->delta, 0, sizeof(data->delta));
     memset(data->prev, 0, sizeof(data->prev));
@@ -400,11 +414,13 @@ static void dya_analog_input_async_init(struct k_work *work) {
     if (data->sampling_hz) {
         enable_set_value(dev, true);
     }
+    LOG_INF("%s ready", dev->name);
 }
 
 static int dya_analog_input_init(const struct device *dev) {
     struct dya_analog_input_data *data = dev->data;
     data->dev = dev;
+    LOG_INF("%s scheduled init", dev->name);
 
     if (registered_device_count < ARRAY_SIZE(registered_devices)) {
         registered_devices[registered_device_count++] = dev;
