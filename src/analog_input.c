@@ -275,7 +275,6 @@ static void sampling_timer_handler(struct k_timer *timer) {
     LOG_INF("%s sampling timer", data->dev->name);
 #endif
     k_work_submit_to_queue(&dya_analog_input_work_q, &data->sampling_work);
-    k_work_submit(&data->sampling_work);
 }
 
 static int active_set_value(const struct device *dev, bool active) {
