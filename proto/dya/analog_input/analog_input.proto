@@ -78,6 +78,23 @@ message ResetDeviceRequest {
 }
 message ResetDeviceResponse {}
 
+message AnalogAxisValue {
+    uint32 axis_index = 1;
+    uint32 adc_channel = 2;
+    uint32 raw = 3;
+    int32 mv = 4;
+    int32 report_value = 5;
+    int32 accumulated_delta = 6;
+}
+
+message GetValuesRequest {
+    uint32 id = 1;
+}
+message GetValuesResponse {
+    repeated AnalogAxisValue values = 1;
+    uint32 sampled_at_ms = 2;
+}
+
 message ErrorResponse {
     string message = 1;
 }
@@ -90,6 +107,7 @@ message Request {
         SetReportIntervalRequest set_report_interval = 4;
         SetAxisConfigRequest set_axis_config = 5;
         ResetDeviceRequest reset_device = 6;
+        GetValuesRequest get_values = 7;
     }
 }
 
@@ -102,6 +120,7 @@ message Response {
         SetReportIntervalResponse set_report_interval = 5;
         SetAxisConfigResponse set_axis_config = 6;
         ResetDeviceResponse reset_device = 7;
+        GetValuesResponse get_values = 8;
     }
 }
 

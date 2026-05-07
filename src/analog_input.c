@@ -190,13 +190,17 @@ static int dya_analog_input_report_data(const struct device *dev) {
         const struct device *axis_adc = axis->adc_channel.dev;
         int32_t mv = data->as_buff[i];
         adc_raw_to_millivolts(adc_ref_internal(axis_adc), ADC_GAIN_1_6, sequence->resolution, &mv);
+        int32_t value = axis_to_report_value(mv, axis);
+
+        data->last_raw[i] = data->as_buff[i];
+        data->last_mv[i] = mv;
+        data->last_report_value[i] = value;
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
         LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id,
                 data->as_buff[i], mv);
 #endif
 
-        int32_t value = axis_to_report_value(mv, axis);
         if (axis->report_on_change_only) {
             data->delta[i] = value;
         } else {
@@ -387,6 +391,9 @@ static void dya_analog_input_async_init(struct k_work *work) {
     memset(data->delta, 0, sizeof(data->delta));
     memset(data->prev, 0, sizeof(data->prev));
     memset(data->as_buff, 0, sizeof(data->as_buff));
+    memset(data->last_raw, 0, sizeof(data->last_raw));
+    memset(data->last_mv, 0, sizeof(data->last_mv));
+    memset(data->last_report_value, 0, sizeof(data->last_report_value));
 
     data->as = (struct adc_sequence){
         .buffer = data->as_buff,
@@ -506,6 +513,9 @@ int dya_analog_input_runtime_reset(const struct device *dev) {
     int err = rebuild_adc_sequence(dev);
     memset(data->delta, 0, data->axes_len * sizeof(int32_t));
     memset(data->prev, 0, data->axes_len * sizeof(int32_t));
+    memset(data->last_raw, 0, data->axes_len * sizeof(uint16_t));
+    memset(data->last_mv, 0, data->axes_len * sizeof(int32_t));
+    memset(data->last_report_value, 0, data->axes_len * sizeof(int32_t));
     if (was_enabled) {
         enable_set_value(dev, true);
     }

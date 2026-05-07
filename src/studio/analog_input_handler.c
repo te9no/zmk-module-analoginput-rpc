@@ -121,6 +121,19 @@ static int fill_device(dya_analog_input_AnalogInputDevice *dst, uint8_t id,
     return 0;
 }
 
+static void fill_axis_value(dya_analog_input_AnalogAxisValue *dst,
+                            const struct dya_analog_input_data *data, uint8_t index) {
+    const struct dya_analog_input_axis_runtime_config *axis = &data->axes[index];
+
+    *dst = (dya_analog_input_AnalogAxisValue)dya_analog_input_AnalogAxisValue_init_zero;
+    dst->axis_index = index;
+    dst->adc_channel = axis->adc_channel.channel_id;
+    dst->raw = data->last_raw[index];
+    dst->mv = data->last_mv[index];
+    dst->report_value = data->last_report_value[index];
+    dst->accumulated_delta = data->delta[index];
+}
+
 static const struct device *get_device_or_error(uint32_t id, dya_analog_input_Response *resp) {
     const struct device *dev = dya_analog_input_device_get(id);
     if (dev != NULL) {
@@ -243,6 +256,31 @@ static int handle_set_axis_config(const dya_analog_input_SetAxisConfigRequest *r
     return rc;
 }
 
+static int handle_get_values(const dya_analog_input_GetValuesRequest *req,
+                             dya_analog_input_Response *resp) {
+    const struct device *dev = get_device_or_error(req->id, resp);
+    if (dev == NULL) {
+        return -ENOENT;
+    }
+
+    struct dya_analog_input_data *data = dev->data;
+    if (!data->ready) {
+        return -EBUSY;
+    }
+
+    dya_analog_input_GetValuesResponse result = dya_analog_input_GetValuesResponse_init_zero;
+    result.values_count = MIN(data->axes_len, ARRAY_SIZE(result.values));
+    result.sampled_at_ms = (uint32_t)data->last_sample_time;
+
+    for (uint8_t i = 0; i < result.values_count; i++) {
+        fill_axis_value(&result.values[i], data, i);
+    }
+
+    resp->which_response_type = dya_analog_input_Response_get_values_tag;
+    resp->response_type.get_values = result;
+    return 0;
+}
+
 static int handle_reset_device(const dya_analog_input_ResetDeviceRequest *req,
                                dya_analog_input_Response *resp) {
     const struct device *dev = get_device_or_error(req->id, resp);
@@ -294,6 +332,9 @@ static bool dya_analog_input_rpc_handle_request(const zmk_custom_CallRequest *ra
         break;
     case dya_analog_input_Request_reset_device_tag:
         rc = handle_reset_device(&req.request_type.reset_device, resp);
+        break;
+    case dya_analog_input_Request_get_values_tag:
+        rc = handle_get_values(&req.request_type.get_values, resp);
         break;
     default:
         rc = -ENOTSUP;

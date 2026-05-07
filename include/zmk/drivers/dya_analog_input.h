@@ -68,6 +68,9 @@ struct dya_analog_input_data {
     uint16_t as_buff[DYA_ANALOG_INPUT_MAX_AXES];
     int32_t delta[DYA_ANALOG_INPUT_MAX_AXES];
     int32_t prev[DYA_ANALOG_INPUT_MAX_AXES];
+    uint16_t last_raw[DYA_ANALOG_INPUT_MAX_AXES];
+    int32_t last_mv[DYA_ANALOG_INPUT_MAX_AXES];
+    int32_t last_report_value[DYA_ANALOG_INPUT_MAX_AXES];
     struct k_work_delayable init_work;
     bool ready;
 

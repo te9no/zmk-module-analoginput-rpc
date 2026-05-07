@@ -15,7 +15,7 @@ if(CONFIG_DYA_ANALOG_INPUT_STUDIO_RPC)
     set(NANOPB_GENERATE_CPP_STANDALONE OFF)
 
     zephyr_library()
-    file(GLOB_RECURSE PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/proto/*.proto)
+    set(PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/proto/dya/analog_input/analog_input.proto)
 
     nanopb_generate_cpp(proto_srcs proto_hdrs RELPATH ${CMAKE_CURRENT_SOURCE_DIR} ${PROTO_FILES})
     target_include_directories(${ZEPHYR_CURRENT_LIBRARY} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})

@@ -41,7 +41,8 @@ config DYA_ANALOG_INPUT_LOG_DBG_REPORT
 
 config DYA_ANALOG_INPUT_STUDIO_RPC
     bool "Enable DYA analog input custom Studio RPC"
-    depends on ZMK_STUDIO
+    depends on ZMK_STUDIO_RPC
+    select NANOPB
     help
       Exposes the dya_analog_input custom Studio subsystem used by DYA Studio.
 
