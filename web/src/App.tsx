@@ -106,7 +106,6 @@ export function RPCTestSection() {
 
       if (responsePayload) {
         const resp = Response.decode(responsePayload);
-        console.log("Decoded response:", resp);
 
         if (resp.sample) {
           setResponse(resp.sample.value);
