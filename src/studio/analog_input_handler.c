@@ -25,6 +25,9 @@ static struct zmk_rpc_custom_subsystem_meta dya_analog_input_meta = {
 ZMK_RPC_CUSTOM_SUBSYSTEM(dya_analog_input, &dya_analog_input_meta,
                          dya_analog_input_rpc_handle_request);
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(dya_analog_input, dya_analog_input_Response);
+ZMK_RPC_CUSTOM_SUBSYSTEM(dya__analog_input, &dya_analog_input_meta,
+                         dya_analog_input_rpc_handle_request);
+ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(dya__analog_input, dya_analog_input_Response);
 
 static dya_analog_input_AnalogRole role_from_input(uint16_t type, uint16_t code) {
     if (type == INPUT_EV_REL && code == INPUT_REL_X) {

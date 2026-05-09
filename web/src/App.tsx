@@ -3,7 +3,7 @@
  * Demonstrates custom RPC communication with a ZMK device
  */
 
-import { useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import "./App.css";
 import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
 import {
@@ -13,8 +13,12 @@ import {
 } from "@cormoran/zmk-studio-react-hook";
 import { Request, Response } from "./proto/zmk/template/custom";
 
-// Custom subsystem identifier - must match firmware registration
-export const SUBSYSTEM_IDENTIFIER = "dya_analog_input";
+const SUBSYSTEM_CANDIDATES = [
+  "dya_analog_input",
+  "dya__analog_input",
+  "analog_input",
+  "analoginput",
+];
 
 function App() {
   return (
@@ -78,7 +82,22 @@ export function RPCTestSection() {
 
   if (!zmkApp) return null;
 
-  const subsystem = zmkApp.findSubsystem(SUBSYSTEM_IDENTIFIER);
+  const subsystem = useMemo(() => {
+    for (const id of SUBSYSTEM_CANDIDATES) {
+      const found = zmkApp.findSubsystem(id);
+      if (found) {
+        return found;
+      }
+    }
+
+    const available = (zmkApp.state.connection as any)?.subsystems ?? [];
+    const bestEffort = available.find((s: any) => {
+      const id = String(s?.identifier ?? "").toLowerCase();
+      return id.includes("analog") || id.includes("dya");
+    });
+
+    return bestEffort ?? null;
+  }, [zmkApp]);
 
   // Send a sample request to the firmware
   const sendSampleRequest = async () => {
@@ -128,8 +147,8 @@ export function RPCTestSection() {
       <section className="card">
         <div className="warning-message">
           <p>
-            ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
-            firmware includes the analoginput RPC module.
+            ⚠️ AnalogInput subsystem not found. Tried:{" "}
+            {SUBSYSTEM_CANDIDATES.join(", ")}
           </p>
         </div>
       </section>
