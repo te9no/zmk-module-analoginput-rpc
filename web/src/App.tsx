@@ -14,7 +14,7 @@ import {
 import { Request, Response } from "./proto/zmk/template/custom";
 
 // Custom subsystem identifier - must match firmware registration
-export const SUBSYSTEM_IDENTIFIER = "zmk__template";
+export const SUBSYSTEM_IDENTIFIER = "dya_analog_input";
 
 function App() {
   return (
@@ -63,7 +63,7 @@ function App() {
 
       <footer className="app-footer">
         <p>
-          <strong>Template Module</strong> - Customize this for your ZMK module
+          <strong>AnalogInput Module</strong> - Custom Studio RPC
         </p>
       </footer>
     </div>
@@ -129,7 +129,7 @@ export function RPCTestSection() {
         <div className="warning-message">
           <p>
             ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
-            firmware includes the template module.
+            firmware includes the analoginput RPC module.
           </p>
         </div>
       </section>
