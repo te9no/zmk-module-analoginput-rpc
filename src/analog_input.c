@@ -68,6 +68,20 @@ static uint32_t apply_curve_q15(uint32_t normalized_q15,
     }
 }
 
+static int32_t clamp_rel_for_hid(int32_t value, uint16_t evt_type) {
+    if (evt_type != INPUT_EV_REL) {
+        return value;
+    }
+
+    if (value > 127) {
+        return 127;
+    }
+    if (value < -127) {
+        return -127;
+    }
+    return value;
+}
+
 static int32_t axis_to_report_value(int32_t mv,
                                     const struct dya_analog_input_axis_runtime_config *axis) {
     if (!axis->enabled) {
@@ -76,7 +90,7 @@ static int32_t axis_to_report_value(int32_t mv,
 
     int32_t delta = mv - axis->mv_mid;
     int32_t sign = delta >= 0 ? 1 : -1;
-    uint32_t amount = abs(delta);
+    uint32_t amount = (uint32_t)(delta >= 0 ? delta : -(int64_t)delta);
 
     if (amount <= axis->mv_deadzone) {
         return 0;
@@ -96,7 +110,8 @@ static int32_t axis_to_report_value(int32_t mv,
     value = (value * MAX(axis->scale_multiplier, 1U)) / MAX(axis->scale_divisor, 1U);
 
     int32_t signed_value = sign * (int32_t)value;
-    return axis->invert ? -signed_value : signed_value;
+    int32_t result = axis->invert ? -signed_value : signed_value;
+    return clamp_rel_for_hid(result, axis->evt_type);
 }
 
 static int rebuild_adc_sequence(const struct device *dev) {
