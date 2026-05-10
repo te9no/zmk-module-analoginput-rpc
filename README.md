@@ -1,4 +1,4 @@
-# zmk-dya-analog-input
+# zmk-module-analoginput-rpc
 
 Runtime-configurable analog input driver for MeKaBu and DYA Studio.
 
@@ -13,8 +13,10 @@ This module is based on `cormoran/zmk-module-template-with-custom-studio-rpc` an
   - `0`: linear
   - `1`: soft
   - `2`: aggressive
-- Runtime custom Studio RPC subsystem: `dya_analog_input`
-- Compatible with DYA Studio's Analog tab
+- Runtime custom Studio RPC subsystem (primary): `dya__studio`
+- Backward-compatible subsystem aliases: `dya_analog_input`, `dya__analog_input`
+- Web UI for full runtime tuning of all device/axis settings
+- Web UI demo mode (works without device connection)
 
 ## west.yml
 
@@ -48,6 +50,15 @@ CONFIG_DYA_ANALOG_INPUT=y
 CONFIG_ZMK_STUDIO=y
 CONFIG_DYA_ANALOG_INPUT_STUDIO_RPC=y
 ```
+
+## DYA Studio subsystem name
+
+This module now registers as `dya__studio` (main identifier).
+
+If your frontend or tooling still references older names, these aliases are still available:
+
+- `dya_analog_input`
+- `dya__analog_input`
 
 Optional debug:
 
@@ -119,6 +130,44 @@ output = output * scale_multiplier / scale_divisor
 ```
 
 `aggressive` is the recommended curve for mouse movement or scrolling when you want shallow pushes to move slowly and deep pushes to move quickly.
+
+## Web UI
+
+The Web UI lives under `web/` and supports:
+
+- Listing analog devices
+- Editing sampling/report interval
+- Editing all axis runtime fields:
+  - `name`, `enabled`, `adc_channel`, `mv_mid`, `mv_min_max`, `mv_deadzone`
+  - `scale_multiplier`, `scale_divisor`, `invert`, `role`, `report_on_change_only`
+  - `output_min`, `output_max`, `response_curve`
+- Resetting device runtime settings
+- Reading live values
+
+Run locally:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Build:
+
+```bash
+cd web
+npm run build
+```
+
+### Demo mode
+
+You can use the UI without a connected device:
+
+1. Open the Web UI
+2. Click `Enable Demo Mode`
+3. Tune all settings against local demo state
+
+Demo mode is UI-only and does not write to firmware.
 
 ## Current limitation
 
