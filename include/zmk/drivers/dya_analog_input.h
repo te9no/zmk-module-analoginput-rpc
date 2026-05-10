@@ -85,6 +85,7 @@ struct dya_analog_input_data {
     struct dya_analog_input_axis_runtime_config axes[DYA_ANALOG_INPUT_MAX_AXES];
 
     struct k_work sampling_work;
+    struct k_work_sync sampling_work_sync;
     struct k_timer sampling_timer;
 };
 

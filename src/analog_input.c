@@ -296,6 +296,11 @@ static void sampling_timer_handler(struct k_timer *timer) {
     k_work_submit_to_queue(&dya_analog_input_work_q, &data->sampling_work);
 }
 
+static void stop_sampling_sync(struct dya_analog_input_data *data) {
+    k_timer_stop(&data->sampling_timer);
+    k_work_cancel_sync(&data->sampling_work, &data->sampling_work_sync);
+}
+
 static int active_set_value(const struct device *dev, bool active) {
     struct dya_analog_input_data *data = dev->data;
     data->active = active;
@@ -323,7 +328,7 @@ static int enable_set_value(const struct device *dev, bool enable) {
             LOG_INF("%s sampling enabled: %u Hz", dev->name, data->sampling_hz);
         }
     } else {
-        k_timer_stop(&data->sampling_timer);
+        stop_sampling_sync(data);
         LOG_INF("%s sampling disabled", dev->name);
     }
 
@@ -521,8 +526,14 @@ int dya_analog_input_runtime_reset(const struct device *dev) {
     struct dya_analog_input_data *data = dev->data;
     bool was_enabled = data->enabled;
 
+    if (unlikely(!data->ready)) {
+        return -EBUSY;
+    }
+
     if (was_enabled) {
         enable_set_value(dev, false);
+    } else {
+        stop_sampling_sync(data);
     }
     copy_defaults_to_runtime(dev);
     int err = rebuild_adc_sequence(dev);
@@ -544,6 +555,11 @@ int dya_analog_input_runtime_set_sampling_hz(const struct device *dev, uint32_t 
 int dya_analog_input_runtime_set_report_interval_ms(const struct device *dev,
                                                     uint32_t interval_ms) {
     struct dya_analog_input_data *data = dev->data;
+
+    if (unlikely(!data->ready)) {
+        return -EBUSY;
+    }
+
     data->report_interval_ms = interval_ms;
     return 0;
 }
@@ -556,9 +572,15 @@ int dya_analog_input_runtime_set_axis(const struct device *dev, uint8_t axis_ind
         return -EINVAL;
     }
 
+    if (unlikely(!data->ready)) {
+        return -EBUSY;
+    }
+
     bool was_enabled = data->enabled;
     if (was_enabled) {
         enable_set_value(dev, false);
+    } else {
+        stop_sampling_sync(data);
     }
 
     data->axes[axis_index] = *axis;

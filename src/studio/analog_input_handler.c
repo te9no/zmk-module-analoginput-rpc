@@ -25,6 +25,8 @@ static struct zmk_rpc_custom_subsystem_meta dya_analog_input_meta = {
 ZMK_RPC_CUSTOM_SUBSYSTEM(dya_analog_input, &dya_analog_input_meta,
                          dya_analog_input_rpc_handle_request);
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(dya_analog_input, dya_analog_input_Response);
+ZMK_RPC_CUSTOM_SUBSYSTEM(dya__studio, &dya_analog_input_meta, dya_analog_input_rpc_handle_request);
+ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(dya__studio, dya_analog_input_Response);
 ZMK_RPC_CUSTOM_SUBSYSTEM(dya__analog_input, &dya_analog_input_meta,
                          dya_analog_input_rpc_handle_request);
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(dya__analog_input, dya_analog_input_Response);
@@ -122,19 +124,6 @@ static int fill_device(dya_analog_input_AnalogInputDevice *dst, uint8_t id,
     }
 
     return 0;
-}
-
-static void fill_axis_value(dya_analog_input_AnalogAxisValue *dst,
-                            const struct dya_analog_input_data *data, uint8_t index) {
-    const struct dya_analog_input_axis_runtime_config *axis = &data->axes[index];
-
-    *dst = (dya_analog_input_AnalogAxisValue)dya_analog_input_AnalogAxisValue_init_zero;
-    dst->axis_index = index;
-    dst->adc_channel = axis->adc_channel.channel_id;
-    dst->raw = data->last_raw[index];
-    dst->mv = data->last_mv[index];
-    dst->report_value = data->last_report_value[index];
-    dst->accumulated_delta = data->delta[index];
 }
 
 static const struct device *get_device_or_error(uint32_t id, dya_analog_input_Response *resp) {
@@ -272,12 +261,6 @@ static int handle_get_values(const dya_analog_input_GetValuesRequest *req,
     }
 
     dya_analog_input_GetValuesResponse result = dya_analog_input_GetValuesResponse_init_zero;
-    result.values_count = MIN(data->axes_len, ARRAY_SIZE(result.values));
-    result.sampled_at_ms = (uint32_t)data->last_sample_time;
-
-    for (uint8_t i = 0; i < result.values_count; i++) {
-        fill_axis_value(&result.values[i], data, i);
-    }
 
     resp->which_response_type = dya_analog_input_Response_get_values_tag;
     resp->response_type.get_values = result;
