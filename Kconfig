@@ -33,6 +33,14 @@ config DYA_ANALOG_INPUT_STALE_SAMPLE_MS
     int "Milliseconds before stale accumulated deltas are purged"
     default 250
 
+config DYA_ANALOG_INPUT_SETTINGS_PERSIST
+    bool "Persist runtime analog settings across reboot"
+    depends on SETTINGS
+    default y
+    help
+      Saves runtime-updated analog input settings to Zephyr settings storage
+      and restores them on boot.
+
 config DYA_ANALOG_INPUT_LOG_DBG_RAW
     bool "Log raw ADC readings"
 

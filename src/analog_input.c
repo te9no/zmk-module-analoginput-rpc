@@ -18,6 +18,7 @@
 #include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/sys/util.h>
 
 #include <zmk/drivers/dya_analog_input.h>
@@ -31,6 +32,138 @@ static bool work_q_started;
 
 static const struct device *registered_devices[CONFIG_DYA_ANALOG_INPUT_MAX_DEVICES];
 static uint8_t registered_device_count;
+
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+#define DYA_ANALOG_INPUT_SETTINGS_PREFIX "dya_analog_input"
+
+struct dya_analog_input_axis_persisted {
+    char name[16];
+    uint8_t enabled;
+    uint16_t adc_channel;
+    uint16_t mv_mid;
+    uint16_t mv_min_max;
+    uint16_t mv_deadzone;
+    uint16_t scale_multiplier;
+    uint16_t scale_divisor;
+    uint8_t invert;
+    uint16_t role_evt_type;
+    uint16_t role_input_code;
+    uint8_t report_on_change_only;
+    uint8_t output_min;
+    uint8_t output_max;
+    uint8_t response_curve;
+};
+
+struct dya_analog_input_device_persisted {
+    uint32_t sampling_hz;
+    uint32_t report_interval_ms;
+    struct dya_analog_input_axis_persisted axes[DYA_ANALOG_INPUT_MAX_AXES];
+};
+
+static int settings_load_device_cb(const char *key, size_t len, settings_read_cb read_cb,
+                                   void *cb_arg, void *param) {
+    struct dya_analog_input_device_persisted *persisted = param;
+
+    if (strcmp(key, "state") != 0 || len != sizeof(*persisted)) {
+        return 0;
+    }
+
+    ssize_t rd = read_cb(cb_arg, persisted, sizeof(*persisted));
+    if (rd < 0) {
+        return (int)rd;
+    }
+    return 0;
+}
+
+static void apply_persisted_axis(struct dya_analog_input_axis_runtime_config *dst,
+                                 const struct dya_analog_input_axis_persisted *src) {
+    snprintf(dst->name, sizeof(dst->name), "%s", src->name);
+    dst->enabled = src->enabled;
+    dst->adc_channel.channel_id = src->adc_channel;
+#if CONFIG_DYA_ANALOG_INPUT_USE_DTS_ADC_CH_CFG
+    dst->adc_channel.channel_cfg.channel_id = src->adc_channel;
+#endif
+    dst->mv_mid = src->mv_mid;
+    dst->mv_min_max = MAX(src->mv_min_max, 1U);
+    dst->mv_deadzone = src->mv_deadzone;
+    dst->scale_multiplier = MAX(src->scale_multiplier, 1U);
+    dst->scale_divisor = MAX(src->scale_divisor, 1U);
+    dst->invert = src->invert;
+    dst->evt_type = src->role_evt_type;
+    dst->input_code = src->role_input_code;
+    dst->report_on_change_only = src->report_on_change_only;
+    dst->output_min = src->output_min;
+    dst->output_max = MAX(src->output_max, src->output_min + 1);
+    dst->response_curve = (enum dya_analog_response_curve)src->response_curve;
+}
+
+static void encode_persisted_axis(struct dya_analog_input_axis_persisted *dst,
+                                  const struct dya_analog_input_axis_runtime_config *src) {
+    memset(dst, 0, sizeof(*dst));
+    snprintf(dst->name, sizeof(dst->name), "%s", src->name);
+    dst->enabled = src->enabled;
+    dst->adc_channel = src->adc_channel.channel_id;
+    dst->mv_mid = src->mv_mid;
+    dst->mv_min_max = src->mv_min_max;
+    dst->mv_deadzone = src->mv_deadzone;
+    dst->scale_multiplier = src->scale_multiplier;
+    dst->scale_divisor = src->scale_divisor;
+    dst->invert = src->invert;
+    dst->role_evt_type = src->evt_type;
+    dst->role_input_code = src->input_code;
+    dst->report_on_change_only = src->report_on_change_only;
+    dst->output_min = src->output_min;
+    dst->output_max = src->output_max;
+    dst->response_curve = src->response_curve;
+}
+
+static int load_persisted_state(const struct device *dev) {
+    struct dya_analog_input_data *data = dev->data;
+    struct dya_analog_input_device_persisted persisted = {0};
+    char subtree[40];
+
+    snprintf(subtree, sizeof(subtree), "%s/%u", DYA_ANALOG_INPUT_SETTINGS_PREFIX, data->settings_id);
+    int rc = settings_load_subtree_direct(subtree, settings_load_device_cb, &persisted);
+    if (rc != 0) {
+        LOG_WRN("%s failed to load persisted settings: %d", dev->name, rc);
+        return rc;
+    }
+
+    if (persisted.sampling_hz == 0 && persisted.report_interval_ms == 0 &&
+        persisted.axes[0].name[0] == '\0') {
+        return 0;
+    }
+
+    data->sampling_hz = persisted.sampling_hz;
+    data->report_interval_ms = persisted.report_interval_ms;
+
+    for (uint8_t i = 0; i < data->axes_len; i++) {
+        apply_persisted_axis(&data->axes[i], &persisted.axes[i]);
+    }
+
+    LOG_INF("%s restored persisted analog input settings", dev->name);
+    return 0;
+}
+
+static int save_persisted_state(const struct device *dev) {
+    struct dya_analog_input_data *data = dev->data;
+    struct dya_analog_input_device_persisted persisted = {0};
+    char key[48];
+
+    persisted.sampling_hz = data->sampling_hz;
+    persisted.report_interval_ms = data->report_interval_ms;
+    for (uint8_t i = 0; i < data->axes_len; i++) {
+        encode_persisted_axis(&persisted.axes[i], &data->axes[i]);
+    }
+
+    snprintf(key, sizeof(key), "%s/%u/state", DYA_ANALOG_INPUT_SETTINGS_PREFIX, data->settings_id);
+    int rc = settings_save_one(key, &persisted, sizeof(persisted));
+    if (rc != 0) {
+        LOG_WRN("%s failed to save persisted settings: %d", dev->name, rc);
+    }
+    return rc;
+}
+#endif
 
 static uint32_t isqrt32(uint32_t value) {
     uint32_t result = 0;
@@ -393,6 +526,9 @@ static void dya_analog_input_async_init(struct k_work *work) {
     const struct device *dev = data->dev;
 
     copy_defaults_to_runtime(dev);
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+    (void)load_persisted_state(dev);
+#endif
     if (data->axes_len == 0) {
         LOG_ERR("%s has no analog axes", dev->name);
         return;
@@ -460,6 +596,7 @@ static int dya_analog_input_init(const struct device *dev) {
     LOG_INF("%s scheduled init", dev->name);
 
     if (registered_device_count < ARRAY_SIZE(registered_devices)) {
+        data->settings_id = registered_device_count;
         registered_devices[registered_device_count++] = dev;
     } else {
         LOG_WRN("Too many dya analog input devices; Studio will only see the first %u",
@@ -545,11 +682,20 @@ int dya_analog_input_runtime_reset(const struct device *dev) {
     if (was_enabled) {
         enable_set_value(dev, true);
     }
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+    (void)save_persisted_state(dev);
+#endif
     return err;
 }
 
 int dya_analog_input_runtime_set_sampling_hz(const struct device *dev, uint32_t hz) {
-    return sample_hz_set_value(dev, hz);
+    int rc = sample_hz_set_value(dev, hz);
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+    if (rc == 0) {
+        (void)save_persisted_state(dev);
+    }
+#endif
+    return rc;
 }
 
 int dya_analog_input_runtime_set_report_interval_ms(const struct device *dev,
@@ -561,6 +707,9 @@ int dya_analog_input_runtime_set_report_interval_ms(const struct device *dev,
     }
 
     data->report_interval_ms = interval_ms;
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+    (void)save_persisted_state(dev);
+#endif
     return 0;
 }
 
@@ -598,6 +747,11 @@ int dya_analog_input_runtime_set_axis(const struct device *dev, uint8_t axis_ind
         enable_set_value(dev, true);
     }
 
+#if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_SETTINGS_PERSIST)
+    if (err == 0) {
+        (void)save_persisted_state(dev);
+    }
+#endif
     return err;
 }
 

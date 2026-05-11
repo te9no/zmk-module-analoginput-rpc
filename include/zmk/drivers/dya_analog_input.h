@@ -80,6 +80,7 @@ struct dya_analog_input_data {
     int64_t last_report_time;
     bool enabled;
     bool active;
+    uint8_t settings_id;
 
     uint8_t axes_len;
     struct dya_analog_input_axis_runtime_config axes[DYA_ANALOG_INPUT_MAX_AXES];
