@@ -248,25 +248,6 @@ static int handle_set_axis_config(const dya_analog_input_SetAxisConfigRequest *r
     return rc;
 }
 
-static int handle_get_values(const dya_analog_input_GetValuesRequest *req,
-                             dya_analog_input_Response *resp) {
-    const struct device *dev = get_device_or_error(req->id, resp);
-    if (dev == NULL) {
-        return -ENOENT;
-    }
-
-    struct dya_analog_input_data *data = dev->data;
-    if (!data->ready) {
-        return -EBUSY;
-    }
-
-    dya_analog_input_GetValuesResponse result = dya_analog_input_GetValuesResponse_init_zero;
-
-    resp->which_response_type = dya_analog_input_Response_get_values_tag;
-    resp->response_type.get_values = result;
-    return 0;
-}
-
 static int handle_reset_device(const dya_analog_input_ResetDeviceRequest *req,
                                dya_analog_input_Response *resp) {
     const struct device *dev = get_device_or_error(req->id, resp);
@@ -318,9 +299,6 @@ static bool dya_analog_input_rpc_handle_request(const zmk_custom_CallRequest *ra
         break;
     case dya_analog_input_Request_reset_device_tag:
         rc = handle_reset_device(&req.request_type.reset_device, resp);
-        break;
-    case dya_analog_input_Request_get_values_tag:
-        rc = handle_get_values(&req.request_type.get_values, resp);
         break;
     default:
         rc = -ENOTSUP;

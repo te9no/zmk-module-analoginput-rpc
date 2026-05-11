@@ -131,7 +131,6 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
   const [status, setStatus] = useState<string | null>(demoMode ? "Demo data loaded" : null);
   const [isLoading, setIsLoading] = useState(false);
-  const [polling, setPolling] = useState(false);
 
   const subsystem = useMemo(() => {
     if (!zmkApp || demoMode) return null;
@@ -257,35 +256,6 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
     }
   };
 
-  const loadValues = async () => {
-    if (!selectedDevice) return;
-
-    if (demoMode) {
-      const make = () => Math.floor(Math.random() * 4000);
-      const lines = selectedDevice.axes.map((a) => {
-        const raw = make();
-        const mv = raw;
-        const out = Math.floor((raw / 4000) * a.outputMax);
-        return `axis${a.axisIndex}=raw:${raw},mv:${mv},out:${out}`;
-      });
-      setStatus(`Demo values: ${lines.join(" / ")}`);
-      return;
-    }
-
-    setPolling(true);
-    try {
-      const resp = await callRPC({ getValues: { id: selectedDevice.id } });
-      const values = resp?.getValues?.values ?? [];
-      setStatus(
-        `Live values: ${values
-          .map((v) => `axis${v.axisIndex}=raw:${v.raw},mv:${v.mv},out:${v.reportValue}`)
-          .join(" / ")}`
-      );
-    } finally {
-      setPolling(false);
-    }
-  };
-
   if (!demoMode && !zmkApp) return null;
 
   if (!demoMode && !subsystem) {
@@ -334,9 +304,6 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
             <input id="report_interval_ms" type="number" value={selectedDevice.reportIntervalMs} onChange={(e) => updateDeviceField("report_interval_ms", Number(e.target.value) || 0)} />
           </div>
           <div className="row">
-            <button className="btn btn-secondary" onClick={loadValues} disabled={polling}>
-              {polling ? "Loading values..." : "Read Values"}
-            </button>
             <button className="btn btn-secondary" onClick={resetDevice}>Reset Device</button>
           </div>
           {selectedDevice.axes.map((axis) => (

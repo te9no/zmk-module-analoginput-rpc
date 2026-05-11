@@ -55,10 +55,13 @@ struct dya_analog_input_axis_persisted {
 };
 
 struct dya_analog_input_device_persisted {
+    uint8_t version;
     uint32_t sampling_hz;
     uint32_t report_interval_ms;
     struct dya_analog_input_axis_persisted axes[DYA_ANALOG_INPUT_MAX_AXES];
 };
+
+#define DYA_ANALOG_INPUT_SETTINGS_VERSION 1
 
 static int settings_load_device_cb(const char *key, size_t len, settings_read_cb read_cb,
                                    void *cb_arg, void *param) {
@@ -97,6 +100,19 @@ static void apply_persisted_axis(struct dya_analog_input_axis_runtime_config *ds
     dst->response_curve = (enum dya_analog_response_curve)src->response_curve;
 }
 
+static void sanitize_runtime_axis(struct dya_analog_input_axis_runtime_config *axis) {
+    axis->scale_multiplier = MAX(axis->scale_multiplier, 1U);
+    axis->scale_divisor = MAX(axis->scale_divisor, 1U);
+    axis->mv_min_max = MAX(axis->mv_min_max, 1U);
+    axis->output_max = MAX(axis->output_max, axis->output_min + 1U);
+}
+
+static void sanitize_runtime_device(struct dya_analog_input_data *data) {
+    for (uint8_t i = 0; i < data->axes_len; i++) {
+        sanitize_runtime_axis(&data->axes[i]);
+    }
+}
+
 static void encode_persisted_axis(struct dya_analog_input_axis_persisted *dst,
                                   const struct dya_analog_input_axis_runtime_config *src) {
     memset(dst, 0, sizeof(*dst));
@@ -129,8 +145,7 @@ static int load_persisted_state(const struct device *dev) {
         return rc;
     }
 
-    if (persisted.sampling_hz == 0 && persisted.report_interval_ms == 0 &&
-        persisted.axes[0].name[0] == '\0') {
+    if (persisted.version != DYA_ANALOG_INPUT_SETTINGS_VERSION) {
         return 0;
     }
 
@@ -140,6 +155,7 @@ static int load_persisted_state(const struct device *dev) {
     for (uint8_t i = 0; i < data->axes_len; i++) {
         apply_persisted_axis(&data->axes[i], &persisted.axes[i]);
     }
+    sanitize_runtime_device(data);
 
     LOG_INF("%s restored persisted analog input settings", dev->name);
     return 0;
@@ -150,6 +166,7 @@ static int save_persisted_state(const struct device *dev) {
     struct dya_analog_input_device_persisted persisted = {0};
     char key[48];
 
+    persisted.version = DYA_ANALOG_INPUT_SETTINGS_VERSION;
     persisted.sampling_hz = data->sampling_hz;
     persisted.report_interval_ms = data->report_interval_ms;
     for (uint8_t i = 0; i < data->axes_len; i++) {
@@ -337,12 +354,12 @@ static int dya_analog_input_report_data(const struct device *dev) {
         const struct dya_analog_input_axis_runtime_config *axis = &data->axes[i];
         const struct device *axis_adc = axis->adc_channel.dev;
         int32_t mv = data->as_buff[i];
-        adc_raw_to_millivolts(adc_ref_internal(axis_adc), ADC_GAIN_1_6, sequence->resolution, &mv);
+        int mv_rc = adc_raw_to_millivolts(adc_ref_internal(axis_adc), ADC_GAIN_1_6,
+                                          sequence->resolution, &mv);
+        if (mv_rc < 0) {
+            LOG_WRN("axis %u adc_raw_to_millivolts failed: %d", i, mv_rc);
+        }
         int32_t value = axis_to_report_value(mv, axis);
-
-        data->last_raw[i] = data->as_buff[i];
-        data->last_mv[i] = mv;
-        data->last_report_value[i] = value;
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
         LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id,
@@ -516,6 +533,7 @@ static void copy_defaults_to_runtime(const struct device *dev) {
         dst->output_min = src->output_min;
         dst->output_max = src->output_max;
         dst->response_curve = src->response_curve;
+        sanitize_runtime_axis(dst);
     }
 }
 
@@ -547,9 +565,6 @@ static void dya_analog_input_async_init(struct k_work *work) {
     memset(data->delta, 0, sizeof(data->delta));
     memset(data->prev, 0, sizeof(data->prev));
     memset(data->as_buff, 0, sizeof(data->as_buff));
-    memset(data->last_raw, 0, sizeof(data->last_raw));
-    memset(data->last_mv, 0, sizeof(data->last_mv));
-    memset(data->last_report_value, 0, sizeof(data->last_report_value));
 
     data->as = (struct adc_sequence){
         .buffer = data->as_buff,
@@ -676,9 +691,6 @@ int dya_analog_input_runtime_reset(const struct device *dev) {
     int err = rebuild_adc_sequence(dev);
     memset(data->delta, 0, data->axes_len * sizeof(int32_t));
     memset(data->prev, 0, data->axes_len * sizeof(int32_t));
-    memset(data->last_raw, 0, data->axes_len * sizeof(uint16_t));
-    memset(data->last_mv, 0, data->axes_len * sizeof(int32_t));
-    memset(data->last_report_value, 0, data->axes_len * sizeof(int32_t));
     if (was_enabled) {
         enable_set_value(dev, true);
     }
@@ -733,11 +745,7 @@ int dya_analog_input_runtime_set_axis(const struct device *dev, uint8_t axis_ind
     }
 
     data->axes[axis_index] = *axis;
-    data->axes[axis_index].scale_multiplier = MAX(data->axes[axis_index].scale_multiplier, 1);
-    data->axes[axis_index].scale_divisor = MAX(data->axes[axis_index].scale_divisor, 1);
-    data->axes[axis_index].mv_min_max = MAX(data->axes[axis_index].mv_min_max, 1);
-    data->axes[axis_index].output_max = MAX(data->axes[axis_index].output_max,
-                                            data->axes[axis_index].output_min + 1);
+    sanitize_runtime_axis(&data->axes[axis_index]);
 
     int err = rebuild_adc_sequence(dev);
     data->delta[axis_index] = 0;
