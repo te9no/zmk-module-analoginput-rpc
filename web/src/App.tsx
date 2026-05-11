@@ -1,6 +1,7 @@
 import { useContext, useMemo, useState } from "react";
 import "./App.css";
 import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
+import { connect as gatt_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/gatt";
 import {
   ZMKConnection,
   ZMKCustomSubsystem,
@@ -91,9 +92,14 @@ function App() {
                 </div>
               )}
               {!isLoading && (
-                <button className="btn btn-primary" onClick={() => connect(serial_connect)}>
-                  Connect Serial
-                </button>
+                <div className="row">
+                  <button className="btn btn-primary" onClick={() => connect(gatt_connect)}>
+                    Connect Bluetooth
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => connect(serial_connect)}>
+                    Connect Serial
+                  </button>
+                </div>
               )}
             </section>
             {demoMode && <RPCTestSection demoMode />}
