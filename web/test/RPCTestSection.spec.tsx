@@ -33,6 +33,8 @@ describe("RPCTestSection", () => {
       </ZMKAppProvider>
     );
 
-    expect(screen.getByText(/AnalogInput subsystem not found/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/AnalogInput subsystem not found/i)
+    ).toBeInTheDocument();
   });
 });

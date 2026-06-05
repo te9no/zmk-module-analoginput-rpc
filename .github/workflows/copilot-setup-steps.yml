@@ -41,7 +41,7 @@ jobs:
             source ~/.bashrc
       - name: Cache Zephyr SDK
         id: cache-zephyr
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
             path: /home/runner/zephyr-sdk-0.16.3
             key: zephyr-sdk-0-16-3-arm-zephyr-eabi
@@ -57,7 +57,7 @@ jobs:
             cd ~/zephyr-sdk-0.16.3
             ./setup.sh -h -c -t arm-zephyr-eabi
       - name: Cache west modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         env:
           cache_name: cache-west-modules

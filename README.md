@@ -148,8 +148,8 @@ Run locally:
 
 ```bash
 cd web
-npm install
-npm run dev
+npm ci
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Build:
@@ -158,6 +158,14 @@ Build:
 cd web
 npm run build
 ```
+
+Runtime writes are explicit and bounded:
+
+- Device-level `sampling_hz` and `report_interval_ms` edits stay local until
+  `Apply Device Settings` is pressed.
+- Axis edits stay local in each axis card until `Apply Axis` is pressed.
+- RPC operations are serialized and use a timeout, so an unavailable subsystem
+  does not leave the UI permanently busy.
 
 ### Demo mode
 

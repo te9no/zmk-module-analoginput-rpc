@@ -16,9 +16,9 @@ jobs:
     name: Build
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Cache west modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         continue-on-error: true
         env:
           cache_name: cache-west-modules
@@ -36,7 +36,7 @@ jobs:
       - name: Test
         run: python3 -m unittest -v
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmk-firmware
           path: |

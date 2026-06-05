@@ -9,6 +9,9 @@
   --primary: #0b6bcb;
   --primary-strong: #0756a6;
   --focus: #7cc0ff;
+  --success: #087443;
+  --danger: #b00020;
+  --warning: #7a4d00;
 }
 
 * {
@@ -102,11 +105,33 @@ select:focus-visible {
 }
 
 .error-message {
-  color: #b00020;
+  color: var(--danger);
 }
 
 .warning-message {
-  color: #7a4d00;
+  color: var(--warning);
+}
+
+.status-message {
+  border-radius: 999px;
+  padding: 0.42rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.status-message.info {
+  background: rgba(11, 107, 203, 0.1);
+  color: var(--primary-strong);
+}
+
+.status-message.success {
+  background: rgba(8, 116, 67, 0.1);
+  color: var(--success);
+}
+
+.status-message.error {
+  background: rgba(176, 0, 32, 0.1);
+  color: var(--danger);
 }
 
 .input-group {

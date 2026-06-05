@@ -21,9 +21,13 @@ describe("App Component", () => {
 
   it("connects to device", async () => {
     const mocks = setupZMKMocks();
-    mocks.mockSuccessfulConnection({ deviceName: "Test Keyboard", subsystems: [SUBSYSTEM_IDENTIFIER] });
+    mocks.mockSuccessfulConnection({
+      deviceName: "Test Keyboard",
+      subsystems: [SUBSYSTEM_IDENTIFIER],
+    });
 
-    const { connect: serialConnect } = await import("@zmkfirmware/zmk-studio-ts-client/transport/serial");
+    const { connect: serialConnect } =
+      await import("@zmkfirmware/zmk-studio-ts-client/transport/serial");
     (serialConnect as jest.Mock).mockResolvedValue(mocks.mockTransport);
 
     render(<App />);
@@ -31,7 +35,9 @@ describe("App Component", () => {
     await user.click(screen.getByText(/Connect Serial/i));
 
     await waitFor(() => {
-      expect(screen.getByText(/Connected to: Test Keyboard/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Connected to: Test Keyboard/i)
+      ).toBeInTheDocument();
     });
   });
 });

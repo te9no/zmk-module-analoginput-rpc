@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
 import { connect as gatt_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/gatt";
@@ -16,8 +16,23 @@ import {
   type AnalogInputDevice,
 } from "./proto/dya/analog_input/analog_input";
 
-const SUBSYSTEM_CANDIDATES = ["dya__studio", "dya_analog_input", "dya__analog_input", "analog_input", "analoginput"];
+const SUBSYSTEM_CANDIDATES = [
+  "dya__studio",
+  "dya_analog_input",
+  "dya__analog_input",
+  "analog_input",
+  "analoginput",
+];
 export const SUBSYSTEM_IDENTIFIER = "dya__studio";
+const RPC_TIMEOUT_MS = 7000;
+
+type StatusKind = "info" | "success" | "error";
+type StudioSubsystemInfo = {
+  identifier?: string;
+  id?: string;
+  name?: string;
+  index: number;
+};
 
 function createDemoDevice(): AnalogInputDevice {
   return {
@@ -73,7 +88,10 @@ function App() {
         <h1>DYA Analog Input Config</h1>
         <p>ZMK Studio RPC Web UI</p>
         <div className="row">
-          <button className="btn btn-secondary" onClick={() => setDemoMode((v) => !v)}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setDemoMode((v) => !v)}
+          >
             {demoMode ? "Disable Demo Mode" : "Enable Demo Mode"}
           </button>
           {demoMode && <span>Demo mode active (no device required)</span>}
@@ -93,10 +111,16 @@ function App() {
               )}
               {!isLoading && (
                 <div className="row">
-                  <button className="btn btn-primary" onClick={() => connect(gatt_connect)}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => connect(gatt_connect)}
+                  >
                     Connect Bluetooth
                   </button>
-                  <button className="btn btn-secondary" onClick={() => connect(serial_connect)}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => connect(serial_connect)}
+                  >
                     Connect Serial
                   </button>
                 </div>
@@ -127,10 +151,18 @@ function App() {
 
 export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
   const zmkApp = useContext(ZMKAppContext);
-  const [devices, setDevices] = useState<AnalogInputDevice[]>(demoMode ? [createDemoDevice()] : []);
+  const [devices, setDevices] = useState<AnalogInputDevice[]>(
+    demoMode ? [createDemoDevice()] : []
+  );
   const [selectedDeviceId, setSelectedDeviceId] = useState<number>(0);
-  const [status, setStatus] = useState<string | null>(demoMode ? "Demo data loaded" : null);
+  const [status, setStatus] = useState<string | null>(
+    demoMode ? "Demo data loaded" : null
+  );
+  const [statusKind, setStatusKind] = useState<StatusKind>(
+    demoMode ? "success" : "info"
+  );
   const [isLoading, setIsLoading] = useState(false);
+  const operationRef = useRef<string | null>(null);
 
   const subsystem = useMemo(() => {
     if (!zmkApp || demoMode) return null;
@@ -140,8 +172,10 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
       if (found) return found;
     }
 
-    const available = (zmkApp.state.connection as any)?.subsystems ?? [];
-    const bestEffort = available.find((s: any) => {
+    const available =
+      (zmkApp.state.connection as { subsystems?: StudioSubsystemInfo[] } | null)
+        ?.subsystems ?? [];
+    const bestEffort = available.find((s) => {
       const id = String(s?.identifier ?? "").toLowerCase();
       return id.includes("analog") || id.includes("dya");
     });
@@ -149,70 +183,149 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
     return bestEffort ?? null;
   }, [zmkApp, demoMode]);
 
+  const setStatusMessage = (
+    message: string | null,
+    kind: StatusKind = "info"
+  ) => {
+    setStatus(message);
+    setStatusKind(kind);
+  };
+
+  const startOperation = (label: string) => {
+    if (operationRef.current) {
+      setStatusMessage(
+        `${operationRef.current} is still running. Please wait a moment.`
+      );
+      return false;
+    }
+
+    operationRef.current = label;
+    setIsLoading(true);
+    setStatusMessage(label);
+    return true;
+  };
+
+  const finishOperation = () => {
+    operationRef.current = null;
+    setIsLoading(false);
+  };
+
   const callRPC = async (request: Request) => {
-    if (!zmkApp?.state.connection || !subsystem) return null;
-    const service = new ZMKCustomSubsystem(zmkApp.state.connection, subsystem.index);
+    if (!zmkApp?.state.connection || !subsystem) {
+      throw new Error("AnalogInput subsystem is not available");
+    }
+    const service = new ZMKCustomSubsystem(
+      zmkApp.state.connection,
+      subsystem.index
+    );
     const payload = Request.encode(Request.create(request)).finish();
-    const responsePayload = await service.callRPC(payload);
-    if (!responsePayload) return null;
+    const responsePayload = await service.callRPC(payload, {
+      timeout: RPC_TIMEOUT_MS,
+    });
+    if (!responsePayload) throw new Error("Empty RPC response");
     const resp = Response.decode(responsePayload);
     if (resp.error) throw new Error(resp.error.message || "RPC error");
     return resp;
   };
 
+  const loadDeviceList = async () => {
+    const resp = await callRPC({ listDevices: {} });
+    const list = resp.listDevices?.devices ?? [];
+
+    setDevices(list);
+    if (list.length > 0 && !list.some((d) => d.id === selectedDeviceId)) {
+      setSelectedDeviceId(list[0].id);
+    }
+
+    return list.length;
+  };
+
   const refreshDevices = async () => {
     if (demoMode) {
-      setDevices((current) => (current.length > 0 ? current : [createDemoDevice()]));
-      setStatus("Demo devices refreshed");
+      setDevices((current) =>
+        current.length > 0 ? current : [createDemoDevice()]
+      );
+      setStatusMessage("Demo devices refreshed", "success");
       return;
     }
 
-    setIsLoading(true);
-    setStatus(null);
+    if (!startOperation("Loading analog input devices...")) return;
     try {
-      const resp = await callRPC({ listDevices: {} });
-      const list = resp?.listDevices?.devices ?? [];
-      setDevices(list);
-      if (list.length > 0 && !list.some((d) => d.id === selectedDeviceId)) setSelectedDeviceId(list[0].id);
-      setStatus(`Loaded ${list.length} device(s)`);
+      const count = await loadDeviceList();
+      setStatusMessage(`Loaded ${count} device(s)`, "success");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to load devices");
+      setStatusMessage(
+        error instanceof Error ? error.message : "Failed to load devices",
+        "error"
+      );
     } finally {
-      setIsLoading(false);
+      finishOperation();
     }
   };
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId) ?? null;
 
-  const replaceSelectedDevice = (updater: (device: AnalogInputDevice) => AnalogInputDevice) => {
+  const replaceSelectedDevice = (
+    updater: (device: AnalogInputDevice) => AnalogInputDevice
+  ) => {
     setDevices((current) =>
       current.map((d) => (d.id === selectedDeviceId ? updater(d) : d))
     );
   };
 
-  const updateDeviceField = async (field: "sampling_hz" | "report_interval_ms", value: number) => {
+  const updateDeviceField = (
+    field: "sampling_hz" | "report_interval_ms",
+    value: number
+  ) => {
+    if (!selectedDevice) return;
+
+    replaceSelectedDevice((d) => ({
+      ...d,
+      samplingHz: field === "sampling_hz" ? value : d.samplingHz,
+      reportIntervalMs:
+        field === "report_interval_ms" ? value : d.reportIntervalMs,
+    }));
+    setStatusMessage(
+      demoMode
+        ? "Demo settings updated locally"
+        : "Device settings edited locally. Press Apply Device Settings to write.",
+      "info"
+    );
+  };
+
+  const applyDeviceSettings = async () => {
     if (!selectedDevice) return;
 
     if (demoMode) {
-      replaceSelectedDevice((d) => ({
-        ...d,
-        samplingHz: field === "sampling_hz" ? value : d.samplingHz,
-        reportIntervalMs: field === "report_interval_ms" ? value : d.reportIntervalMs,
-      }));
-      setStatus("Demo settings updated");
+      setStatusMessage("Demo device settings applied locally", "success");
       return;
     }
 
-    setIsLoading(true);
+    if (!startOperation("Applying analog device settings...")) return;
     try {
-      if (field === "sampling_hz") {
-        await callRPC({ setSamplingHz: { id: selectedDevice.id, value } });
-      } else {
-        await callRPC({ setReportInterval: { id: selectedDevice.id, valueMs: value } });
-      }
-      await refreshDevices();
+      await callRPC({
+        setSamplingHz: {
+          id: selectedDevice.id,
+          value: selectedDevice.samplingHz,
+        },
+      });
+      await callRPC({
+        setReportInterval: {
+          id: selectedDevice.id,
+          valueMs: selectedDevice.reportIntervalMs,
+        },
+      });
+      await loadDeviceList();
+      setStatusMessage("Applied analog device settings", "success");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to apply device settings",
+        "error"
+      );
     } finally {
-      setIsLoading(false);
+      finishOperation();
     }
   };
 
@@ -224,16 +337,24 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
         ...d,
         axes: d.axes.map((a) => (a.axisIndex === axis.axisIndex ? axis : a)),
       }));
-      setStatus(`Demo axis ${axis.axisIndex} updated`);
+      setStatusMessage(`Demo axis ${axis.axisIndex} updated`, "success");
       return;
     }
 
-    setIsLoading(true);
+    if (!startOperation(`Applying analog axis ${axis.axisIndex}...`)) return;
     try {
       await callRPC({ setAxisConfig: { deviceId: selectedDevice.id, axis } });
-      await refreshDevices();
+      await loadDeviceList();
+      setStatusMessage(`Applied analog axis ${axis.axisIndex}`, "success");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : `Failed to apply axis ${axis.axisIndex}`,
+        "error"
+      );
     } finally {
-      setIsLoading(false);
+      finishOperation();
     }
   };
 
@@ -243,16 +364,22 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
     if (demoMode) {
       setDevices([createDemoDevice()]);
       setSelectedDeviceId(0);
-      setStatus("Demo device reset to defaults");
+      setStatusMessage("Demo device reset to defaults", "success");
       return;
     }
 
-    setIsLoading(true);
+    if (!startOperation("Resetting analog input device...")) return;
     try {
       await callRPC({ resetDevice: { id: selectedDevice.id } });
-      await refreshDevices();
+      await loadDeviceList();
+      setStatusMessage("Reset analog input device to defaults", "success");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error ? error.message : "Failed to reset device",
+        "error"
+      );
     } finally {
-      setIsLoading(false);
+      finishOperation();
     }
   };
 
@@ -262,7 +389,10 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
     return (
       <section className="card">
         <div className="warning-message">
-          <p>AnalogInput subsystem not found. Tried: {SUBSYSTEM_CANDIDATES.join(", ")}</p>
+          <p>
+            AnalogInput subsystem not found. Tried:{" "}
+            {SUBSYSTEM_CANDIDATES.join(", ")}
+          </p>
         </div>
       </section>
     );
@@ -271,18 +401,31 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
   return (
     <section className="card">
       <h2>Analog Input Settings {demoMode ? "(Demo)" : ""}</h2>
-      <p>Configure all runtime settings via {demoMode ? "local demo state" : "RPC"}.</p>
+      <p>
+        Configure all runtime settings via{" "}
+        {demoMode ? "local demo state" : "RPC"}.
+      </p>
       <div className="row">
-        <button className="btn btn-primary" disabled={isLoading} onClick={refreshDevices}>
+        <button
+          className="btn btn-primary"
+          disabled={isLoading}
+          onClick={refreshDevices}
+        >
           Refresh Devices
         </button>
-        {status && <span>{status}</span>}
+        {status && (
+          <span className={`status-message ${statusKind}`}>{status}</span>
+        )}
       </div>
 
       {devices.length > 0 && (
         <div className="input-group">
           <label htmlFor="device-select">Device</label>
-          <select id="device-select" value={selectedDeviceId} onChange={(e) => setSelectedDeviceId(Number(e.target.value))}>
+          <select
+            id="device-select"
+            value={selectedDeviceId}
+            onChange={(e) => setSelectedDeviceId(Number(e.target.value))}
+          >
             {devices.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.id}: {d.name}
@@ -297,17 +440,52 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
           <h3>Device Settings</h3>
           <div className="input-group">
             <label htmlFor="sampling_hz">sampling_hz</label>
-            <input id="sampling_hz" type="number" value={selectedDevice.samplingHz} onChange={(e) => updateDeviceField("sampling_hz", Number(e.target.value) || 0)} />
+            <input
+              id="sampling_hz"
+              type="number"
+              value={selectedDevice.samplingHz}
+              onChange={(e) =>
+                updateDeviceField("sampling_hz", Number(e.target.value) || 0)
+              }
+            />
           </div>
           <div className="input-group">
             <label htmlFor="report_interval_ms">report_interval_ms</label>
-            <input id="report_interval_ms" type="number" value={selectedDevice.reportIntervalMs} onChange={(e) => updateDeviceField("report_interval_ms", Number(e.target.value) || 0)} />
+            <input
+              id="report_interval_ms"
+              type="number"
+              value={selectedDevice.reportIntervalMs}
+              onChange={(e) =>
+                updateDeviceField(
+                  "report_interval_ms",
+                  Number(e.target.value) || 0
+                )
+              }
+            />
           </div>
           <div className="row">
-            <button className="btn btn-secondary" onClick={resetDevice}>Reset Device</button>
+            <button
+              className="btn btn-primary"
+              disabled={isLoading}
+              onClick={applyDeviceSettings}
+            >
+              Apply Device Settings
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={isLoading}
+              onClick={resetDevice}
+            >
+              Reset Device
+            </button>
           </div>
           {selectedDevice.axes.map((axis) => (
-            <AxisEditor key={axis.axisIndex} axis={axis} onUpdate={updateAxis} />
+            <AxisEditor
+              key={axis.axisIndex}
+              axis={axis}
+              disabled={isLoading}
+              onUpdate={updateAxis}
+            />
           ))}
         </div>
       )}
@@ -315,41 +493,161 @@ export function RPCTestSection({ demoMode = false }: { demoMode?: boolean }) {
   );
 }
 
-function AxisEditor({ axis, onUpdate }: { axis: AnalogAxisConfig; onUpdate: (axis: AnalogAxisConfig) => Promise<void> }) {
+function AxisEditor({
+  axis,
+  disabled,
+  onUpdate,
+}: {
+  axis: AnalogAxisConfig;
+  disabled: boolean;
+  onUpdate: (axis: AnalogAxisConfig) => Promise<void>;
+}) {
   const [draft, setDraft] = useState<AnalogAxisConfig>(axis);
 
-  const set = <K extends keyof AnalogAxisConfig>(key: K, value: AnalogAxisConfig[K]) => {
+  const set = <K extends keyof AnalogAxisConfig>(
+    key: K,
+    value: AnalogAxisConfig[K]
+  ) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
     <fieldset className="axis-box">
       <legend>Axis {axis.axisIndex}</legend>
-      <div className="input-group"><label>Name</label><input value={draft.name} onChange={(e) => set("name", e.target.value)} /></div>
-      <div className="input-group"><label>enabled</label><input type="checkbox" checked={draft.enabled} onChange={(e) => set("enabled", e.target.checked)} /></div>
-      <div className="input-group"><label>adc_channel</label><input type="number" value={draft.adcChannel} onChange={(e) => set("adcChannel", Number(e.target.value) || 0)} /></div>
-      <div className="input-group"><label>mv_mid</label><input type="number" value={draft.mvMid} onChange={(e) => set("mvMid", Number(e.target.value) || 0)} /></div>
-      <div className="input-group"><label>mv_min_max</label><input type="number" value={draft.mvMinMax} onChange={(e) => set("mvMinMax", Number(e.target.value) || 0)} /></div>
-      <div className="input-group"><label>mv_deadzone</label><input type="number" value={draft.mvDeadzone} onChange={(e) => set("mvDeadzone", Number(e.target.value) || 0)} /></div>
-      <div className="input-group"><label>scale_multiplier</label><input type="number" value={draft.scaleMultiplier} onChange={(e) => set("scaleMultiplier", Number(e.target.value) || 1)} /></div>
-      <div className="input-group"><label>scale_divisor</label><input type="number" value={draft.scaleDivisor} onChange={(e) => set("scaleDivisor", Number(e.target.value) || 1)} /></div>
-      <div className="input-group"><label>invert</label><input type="checkbox" checked={draft.invert} onChange={(e) => set("invert", e.target.checked)} /></div>
-      <div className="input-group"><label>report_on_change_only</label><input type="checkbox" checked={draft.reportOnChangeOnly} onChange={(e) => set("reportOnChangeOnly", e.target.checked)} /></div>
-      <div className="input-group"><label>output_min</label><input type="number" value={draft.outputMin} onChange={(e) => set("outputMin", Number(e.target.value) || 0)} /></div>
-      <div className="input-group"><label>output_max</label><input type="number" value={draft.outputMax} onChange={(e) => set("outputMax", Number(e.target.value) || 0)} /></div>
+      <div className="input-group">
+        <label>Name</label>
+        <input
+          value={draft.name}
+          onChange={(e) => set("name", e.target.value)}
+        />
+      </div>
+      <div className="input-group">
+        <label>enabled</label>
+        <input
+          type="checkbox"
+          checked={draft.enabled}
+          onChange={(e) => set("enabled", e.target.checked)}
+        />
+      </div>
+      <div className="input-group">
+        <label>adc_channel</label>
+        <input
+          type="number"
+          value={draft.adcChannel}
+          onChange={(e) => set("adcChannel", Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="input-group">
+        <label>mv_mid</label>
+        <input
+          type="number"
+          value={draft.mvMid}
+          onChange={(e) => set("mvMid", Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="input-group">
+        <label>mv_min_max</label>
+        <input
+          type="number"
+          value={draft.mvMinMax}
+          onChange={(e) => set("mvMinMax", Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="input-group">
+        <label>mv_deadzone</label>
+        <input
+          type="number"
+          value={draft.mvDeadzone}
+          onChange={(e) => set("mvDeadzone", Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="input-group">
+        <label>scale_multiplier</label>
+        <input
+          type="number"
+          value={draft.scaleMultiplier}
+          onChange={(e) => set("scaleMultiplier", Number(e.target.value) || 1)}
+        />
+      </div>
+      <div className="input-group">
+        <label>scale_divisor</label>
+        <input
+          type="number"
+          value={draft.scaleDivisor}
+          onChange={(e) => set("scaleDivisor", Number(e.target.value) || 1)}
+        />
+      </div>
+      <div className="input-group">
+        <label>invert</label>
+        <input
+          type="checkbox"
+          checked={draft.invert}
+          onChange={(e) => set("invert", e.target.checked)}
+        />
+      </div>
+      <div className="input-group">
+        <label>report_on_change_only</label>
+        <input
+          type="checkbox"
+          checked={draft.reportOnChangeOnly}
+          onChange={(e) => set("reportOnChangeOnly", e.target.checked)}
+        />
+      </div>
+      <div className="input-group">
+        <label>output_min</label>
+        <input
+          type="number"
+          value={draft.outputMin}
+          onChange={(e) => set("outputMin", Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="input-group">
+        <label>output_max</label>
+        <input
+          type="number"
+          value={draft.outputMax}
+          onChange={(e) => set("outputMax", Number(e.target.value) || 0)}
+        />
+      </div>
       <div className="input-group">
         <label>role</label>
-        <select value={draft.role} onChange={(e) => set("role", Number(e.target.value) as AnalogRole)}>
-          {Object.entries(AnalogRole).filter(([, v]) => typeof v === "number").map(([k, v]) => <option key={k} value={v as number}>{k}</option>)}
+        <select
+          value={draft.role}
+          onChange={(e) => set("role", Number(e.target.value) as AnalogRole)}
+        >
+          {Object.entries(AnalogRole)
+            .filter(([, v]) => typeof v === "number")
+            .map(([k, v]) => (
+              <option key={k} value={v as number}>
+                {k}
+              </option>
+            ))}
         </select>
       </div>
       <div className="input-group">
         <label>response_curve</label>
-        <select value={draft.responseCurve} onChange={(e) => set("responseCurve", Number(e.target.value) as AnalogResponseCurve)}>
-          {Object.entries(AnalogResponseCurve).filter(([, v]) => typeof v === "number").map(([k, v]) => <option key={k} value={v as number}>{k}</option>)}
+        <select
+          value={draft.responseCurve}
+          onChange={(e) =>
+            set("responseCurve", Number(e.target.value) as AnalogResponseCurve)
+          }
+        >
+          {Object.entries(AnalogResponseCurve)
+            .filter(([, v]) => typeof v === "number")
+            .map(([k, v]) => (
+              <option key={k} value={v as number}>
+                {k}
+              </option>
+            ))}
         </select>
       </div>
-      <button className="btn btn-primary" onClick={() => onUpdate(draft)}>Apply Axis</button>
+      <button
+        className="btn btn-primary"
+        disabled={disabled}
+        onClick={() => onUpdate(draft)}
+      >
+        Apply Axis
+      </button>
     </fieldset>
   );
 }
