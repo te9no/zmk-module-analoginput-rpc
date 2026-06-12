@@ -406,7 +406,7 @@ static int dya_analog_input_report_data(const struct device *dev) {
 
     for (uint8_t i = 0; i < data->axes_len; i++) {
         const struct dya_analog_input_axis_runtime_config *axis = &data->axes[i];
-        int32_t value = data->delta[i];
+        int32_t value = clamp_rel_for_hid(data->delta[i], axis->evt_type);
         int32_t previous = data->prev[i];
 
         if (value == previous) {

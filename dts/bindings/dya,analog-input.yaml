@@ -6,6 +6,8 @@ description: |
 
 compatible: "dya,analog-input"
 
+include: base.yaml
+
 properties:
   sampling-hz:
     type: int
