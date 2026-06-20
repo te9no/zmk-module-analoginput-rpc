@@ -65,7 +65,7 @@ struct dya_analog_input_data {
     struct k_poll_signal async_sig;
     struct k_poll_event async_evt;
 #endif
-    uint16_t as_buff[DYA_ANALOG_INPUT_MAX_AXES];
+    int16_t as_buff[DYA_ANALOG_INPUT_MAX_AXES];
     int32_t delta[DYA_ANALOG_INPUT_MAX_AXES];
     int32_t prev[DYA_ANALOG_INPUT_MAX_AXES];
     struct k_work_delayable init_work;

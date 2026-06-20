@@ -362,7 +362,7 @@ static int dya_analog_input_report_data(const struct device *dev) {
         int32_t value = axis_to_report_value(mv, axis);
 
 #if IS_ENABLED(CONFIG_DYA_ANALOG_INPUT_LOG_DBG_RAW)
-        LOG_INF("axis %u adc %u raw %u mv %d", i, axis->adc_channel.channel_id,
+        LOG_INF("axis %u adc %u raw %d mv %d", i, axis->adc_channel.channel_id,
                 data->as_buff[i], mv);
 #endif
 
@@ -568,7 +568,7 @@ static void dya_analog_input_async_init(struct k_work *work) {
 
     data->as = (struct adc_sequence){
         .buffer = data->as_buff,
-        .buffer_size = data->axes_len * sizeof(uint16_t),
+        .buffer_size = data->axes_len * sizeof(data->as_buff[0]),
         .oversampling = 0,
         .resolution = CONFIG_DYA_ANALOG_INPUT_ADC_RES,
         .calibrate = true,
